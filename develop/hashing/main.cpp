@@ -157,6 +157,32 @@ struct stl_table {
 	std::unordered_map<int, int> map;
 };
 
+struct quadratic_table {
+    static constexpr const char *name = "quadratic";
+
+    struct cell {
+        int key;
+        int value;
+        bool valid = false;
+    };
+
+    quadratic_table()
+            : cells{new cell[M]{}} { }
+
+    // Note: to simply the implementation, destructors and copy/move constructors are missing.
+
+    void put(int k, int v) {
+        // implement put-function for quadrating probing here
+    }
+
+    std::optional<int> get(int k) {
+        // implement get-function for quadrating probing here
+        return 0;
+    }
+
+    cell *cells = nullptr;
+};
+
 // Helper function to evaluate a hash table algorithm.
 // You should not need to touch this.
 template<typename Algo>
@@ -271,7 +297,7 @@ static const char *usage_text =
 	"    --microbenchmark\n"
 	"        Perform microbenchmarking.\n"
 	"    --algo ALGORITHM\n"
-	"        Select an algorithm {chaining,linear,stl}.\n"
+	"        Select an algorithm {chaining,linear,stl,quadratic}.\n"
 	"    --fill FACTOR\n"
 	"        Set the fill factor.\n";
 
@@ -339,7 +365,9 @@ int main(int argc, char **argv) {
 			microbenchmark<linear_table>(fill_factor);
 		}else if(algorithm == "stl") {
 			microbenchmark<stl_table>(fill_factor);
-		}else{
+		}else if(algorithm == "quadratic") {
+            microbenchmark<quadratic_table>(fill_factor);
+        }else{
 			error("unknown algorithm");
 		}
 	}else{
@@ -349,7 +377,11 @@ int main(int argc, char **argv) {
 			evaluate<linear_table>(fill_factor);
 		}else if(algorithm == "stl") {
 			evaluate<stl_table>(fill_factor);
-		}else{
+		}
+        else if(algorithm == "quadratic") {
+            evaluate<quadratic_table>(fill_factor);
+        }
+		else{
 			error("unknown algorithm");
 		}
 	}

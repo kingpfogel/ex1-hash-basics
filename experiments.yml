@@ -34,6 +34,8 @@ variants:
         extra_args: ['--algo', 'linear']
       - name: stl
         extra_args: ['--algo', 'stl']
+      - name: stl
+        extra_args: [ '--algo', 'quadratic' ]
   - axis: fill-factor
     items:
       - name: ff50
