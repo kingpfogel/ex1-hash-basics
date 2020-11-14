@@ -8,7 +8,7 @@ Solutions to the first exercise sheet of experimental algorithms. (Group: L. Thy
 
 ### Common workflow:
 
-- git clone git@github.com:kingpfogel/PAK.git
+- git clone git@github.com:kingpfogel/ex1-hash-basics.git
 - git checkout -b PAK_your-feature-branch-name
 - Change somethings on that branch and add and commit these changes
 - git add --all / git add some-file.py
