@@ -172,12 +172,48 @@ struct quadratic_table {
     // Note: to simply the implementation, destructors and copy/move constructors are missing.
 
     void put(int k, int v) {
-        // implement put-function for quadrating probing here
+        int i = 0;
+        //h(k)+i mod m = linear probing
+        //h(k)+i/2+(i^2)/2 mod m quadratic probing
+        while(true) {
+            assert((i/2) + ((i*i)/2) < M);
+
+            auto idx = hash_to_index(k + (i/2) + ((i*i)/2));
+            auto &c = cells[idx];
+
+            if(!c.valid) {
+                c.key = k;
+                c.value = v;
+                c.valid = true;
+                return;
+            }
+
+            if(c.key == k) {
+                c.value = v;
+                return;
+            }
+
+            ++i;
+        }
     }
 
     std::optional<int> get(int k) {
-        // implement get-function for quadrating probing here
-        return 0;
+        int i = 0;
+
+        while(true) {
+            assert((i/2) + ((i*i)/2) < M);
+
+            auto idx = hash_to_index(k + (i/2) + ((i*i)/2));
+            auto &c = cells[idx];
+
+            if(!c.valid)
+                return std::nullopt;
+
+            if(c.key == k)
+                return c.value;
+
+            ++i;
+        }
     }
 
     cell *cells = nullptr;
