@@ -1,0 +1,80 @@
+# started on Sun Nov 15 17:54:28 2020
+
+
+ Performance counter stats for './hashing --microbenchmark --fill 0.90 --algo chaining':
+
+         19.695,89 msec task-clock:u              #    1,000 CPUs utilized          
+                 0      context-switches:u        #    0,000 K/sec                  
+                 0      cpu-migrations:u          #    0,000 K/sec                  
+           466.171      page-faults:u             #    0,024 M/sec                  
+    52.178.523.734      cycles:u                  #    2,649 GHz                    
+    22.378.064.408      instructions:u            #    0,43  insn per cycle         
+     4.284.507.118      branches:u                #  217,533 M/sec                  
+       152.632.728      branch-misses:u           #    3,56% of all branches        
+
+      19,703833924 seconds time elapsed
+
+      18,801740000 seconds user
+       0,895702000 seconds sys
+
+
+# started on Sun Nov 15 17:54:14 2020
+
+
+ Performance counter stats for './hashing --microbenchmark --fill 0.90 --algo linear':
+
+         13.690,37 msec task-clock:u              #    0,999 CPUs utilized          
+                 0      context-switches:u        #    0,000 K/sec                  
+                 0      cpu-migrations:u          #    0,000 K/sec                  
+             1.014      page-faults:u             #    0,074 K/sec                  
+    37.887.247.842      cycles:u                  #    2,767 GHz                    
+    11.006.328.864      instructions:u            #    0,29  insn per cycle         
+     1.839.712.745      branches:u                #  134,380 M/sec                  
+       169.552.211      branch-misses:u           #    9,22% of all branches        
+
+      13,709039186 seconds time elapsed
+
+      13,630555000 seconds user
+       0,076059000 seconds sys
+
+
+# started on Sun Nov 15 17:55:46 2020
+
+
+ Performance counter stats for './hashing --microbenchmark --fill 0.90 --algo quadratic':
+
+         15.097,58 msec task-clock:u              #    1,000 CPUs utilized          
+                 0      context-switches:u        #    0,000 K/sec                  
+                 0      cpu-migrations:u          #    0,000 K/sec                  
+             1.014      page-faults:u             #    0,067 K/sec                  
+    41.791.364.062      cycles:u                  #    2,768 GHz                    
+    11.027.887.274      instructions:u            #    0,26  insn per cycle         
+     1.479.100.819      branches:u                #   97,969 M/sec                  
+       165.766.588      branch-misses:u           #   11,21% of all branches        
+
+      15,099843872 seconds time elapsed
+
+      15,034304000 seconds user
+       0,063993000 seconds sys
+
+
+# started on Sun Nov 15 17:54:48 2020
+
+
+ Performance counter stats for './hashing --microbenchmark --fill 0.90 --algo stl':
+
+         58.111,51 msec task-clock:u              #    1,000 CPUs utilized          
+                 0      context-switches:u        #    0,000 K/sec                  
+                 0      cpu-migrations:u          #    0,000 K/sec                  
+           471.581      page-faults:u             #    0,008 M/sec                  
+   158.671.584.011      cycles:u                  #    2,730 GHz                    
+    36.034.250.709      instructions:u            #    0,23  insn per cycle         
+     7.001.761.630      branches:u                #  120,488 M/sec                  
+       192.317.209      branch-misses:u           #    2,75% of all branches        
+
+      58,121291194 seconds time elapsed
+
+      57,085367000 seconds user
+       1,027934000 seconds sys
+
+
