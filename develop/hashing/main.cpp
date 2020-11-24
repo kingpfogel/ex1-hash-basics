@@ -341,22 +341,22 @@ struct bucket_cuckoo_table {
     }
 
     std::optional<int> get(int k) {
-        int i = 0;
+        for(int i = 0; i < d; i++){
+            auto idx = hash_to_bucket_index((as[i] * (unsigned)k + bs[i]) >> (32 - 26));
 
-        while(true) {
-            assert(i < M);
+            for(int i2 = 0; i2 < B; i2++){
+                auto &c = cells[idx+i2];
+                if(!c.valid) {
+                    continue;
+                }
 
-            auto idx = hash_to_index(k + i);
-            auto &c = cells[idx];
-
-            if(!c.valid)
-                return std::nullopt;
-
-            if(c.key == k)
-                return c.value;
-
-            ++i;
+                if(c.key == k) {
+                    return c.value;
+                }
+            }
         }
+
+        return std::nullopt;
     }
 
     cell *cells = nullptr;
