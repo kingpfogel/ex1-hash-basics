@@ -247,11 +247,14 @@ struct bucket_cuckoo_table {
             rerollHashFunctions();
         }
 
-
+    int randomOddInt(){
+        int r = chooseHash(prng);
+        return r&1?r:r+1;
+    }
     void rerollHashFunctions() {
         for (int i = 0; i < d; ++i) {
-            as[i] = chooseHash(prng);
-            bs[i] = chooseHash(prng);
+            as[i] = randomOddInt();
+            bs[i] = randomOddInt();
         }
     }
 
@@ -299,6 +302,7 @@ struct bucket_cuckoo_table {
 
         return false;
     }
+
     bool putHelper(int k, int v, int chain = 0, bool hashAgain = true) {
         if(chain > max_eviction_length) {
             bool rehashSuccess = true;
@@ -336,6 +340,7 @@ struct bucket_cuckoo_table {
 
         return putHelper(key, value, ++chain, hashAgain);
     }
+
     void put(int k, int v) {
         putHelper(k, v, 0);
     }
