@@ -309,6 +309,9 @@ struct bucket_cuckoo_table {
             while(hashAgain && rehashSuccess) {
                 rehashSuccess = rehash(k, v);
             }
+            if(!rehashSuccess){
+                return true;
+            }
             return false;
         }
         for(int i = 0; i < d; i++){
