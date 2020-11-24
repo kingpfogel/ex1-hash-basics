@@ -242,14 +242,16 @@ struct bucket_cuckoo_table {
     bucket_cuckoo_table()
         : cells{new cell[(M)]{}},
         as{new int[(d)]{}},
-        bs{new int[(d)]{}},
-        {}
+        bs{new int[(d)]{}}
+        {
+            rerollHashFunctions();
+        }
 
 
     void rerollHashFunctions() {
         for (int i = 0; i < d; ++i) {
-            as[i] = distrib(prng);
-            bs[i] = distrib(prng);
+            as[i] = chooseHash(prng);
+            bs[i] = chooseHash(prng);
         }
     }
 
@@ -262,8 +264,9 @@ struct bucket_cuckoo_table {
     //hash table consists of m/B buckets - each containing B cells => linear probe B times per Bucket
     //Cuckoo hash functions h1, ..., hd select d bucket indices.
 
-    void rehash(int currentKey, int currentValue){
+    bool rehash(int currentKey, int currentValue){
         rerollHashFunctions();
+        std::cout << "a: " << as[0] << " b: " << bs[0] << std::endl;
         cell *tmp = new cell[M];
         std::copy(cells, cells + M, tmp);
         delete[] cells;
@@ -282,7 +285,7 @@ struct bucket_cuckoo_table {
                     std::copy(tmp, tmp + M, cells);
                     delete[] tmp;
                     tmp = nullptr;
-                    break;
+                    return true;
                 }
             } else {
                 //nothing to insert
@@ -290,18 +293,22 @@ struct bucket_cuckoo_table {
         }
         //reinsert current key-value-pair
         if(succeeded) {
-            if(!putHelper(currentKey, currentValue, 0, true));
+            if(!putHelper(currentKey, currentValue, 0, false)){
+                return true;
+            };
         }
 
-
+        return false;
     }
-    bool putHelper(int k, int v, int chain = 0, bool rehash = true) {
-        if(chain > max_eviction_length && rehash) {
-            rehash();
-            return true;
+    bool putHelper(int k, int v, int chain = 0, bool hashAgain = true) {
+        if(chain > max_eviction_length) {
+            while(hashAgain && rehash(k, v)) {
+                std::cout << "rehash" << std::endl;
+            }
+            return false;
         }
         for(int i = 0; i < d; i++){
-            auto idx = hash_to_bucket_index((a[i] * (unsigned)k + b[i]) >> (32 - 26));
+            auto idx = hash_to_bucket_index((as[i] * (unsigned)k + bs[i]) >> (32 - 26));
 
             for(int i2 = 0; i2 < B; i2++){
                 auto &c = cells[idx+i2];
@@ -309,25 +316,25 @@ struct bucket_cuckoo_table {
                     c.key = k;
                     c.value = v;
                     c.valid = true;
-                    return false;
+                    return true;
                 }
 
                 if(c.key == k) {
                     c.value = v;
-                    return false;
+                    return true;
                 }
             }
         }
         //wenn ich hier ankomme, dann sind wohl alle Zellen mit etwas anderem besetzt
         //waehle random h insert element dort und put(old.key, old.value)
         int f = chooseFnc(prng);
-        int replacementIdx = hash_to_bucket_index((a[f] * (unsigned)k + b[f]) >> (32 - 26));
+        int replacementIdx = hash_to_bucket_index((as[f] * (unsigned)k + bs[f]) >> (32 - 26));
         auto &c = cells[replacementIdx];
         int key = c.key, value = c.value;
         c.key = k;
         c.value = v;
 
-        return putHelper(key, value, ++chain, rehash);
+        return putHelper(key, value, ++chain, hashAgain);
     }
     void put(int k, int v) {
         putHelper(k, v, 0);
