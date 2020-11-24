@@ -224,6 +224,14 @@ struct quadratic_table {
 
 struct bucket_cuckoo_table {
     static constexpr const char *name = "bucket_cuckoo";
+    const int d = 2;
+    const int B = 4;
+    const int log2B = log2(B);
+
+    std::mt19937 prng{10};
+    std::uniform_int_distribution<int> chooseHash{1, (2<<(32-26))};
+    std::uniform_int_distribution<int> chooseFnc{0, d-1};
+    int max_eviction_length = log2(M);
 
     struct cell {
         int key;
@@ -232,72 +240,121 @@ struct bucket_cuckoo_table {
     };
 
     bucket_cuckoo_table()
-            : cells_one{new cell[(M)]{}},
-              cells_two{new cell[(M)]{}} {}
+        : cells{new cell[(M)]{}},
+        as{new int[(d)]{}},
+        bs{new int[(d)]{}},
+        {}
 
 
+    void rerollHashFunctions() {
+        for (int i = 0; i < d; ++i) {
+            as[i] = distrib(prng);
+            bs[i] = distrib(prng);
+        }
+    }
+
+    int hash_to_bucket_index(int h) {
+        return (h & ((M >> log2B) - 1)) * B;
+    }
+
+    //d = hash functions
+    //B = buckets => linear probe through buckets
+    //hash table consists of m/B buckets - each containing B cells => linear probe B times per Bucket
+    //Cuckoo hash functions h1, ..., hd select d bucket indices.
+
+    void rehash(int currentKey, int currentValue){
+        rerollHashFunctions();
+        cell *tmp = new cell[M];
+        std::copy(cells, cells + M, tmp);
+        delete[] cells;
+        cells = nullptr;
+        cells = new cell[M];
+        //reinsert all other key-value-pairs
+        bool succeeded;
+        for(int i = 0; i<M; ++i){
+            auto &c = cells[i];
+            if(c.valid){
+                succeeded = putHelper(c.key, c.value, 0, false);
+                if(!succeeded){
+                    delete[] cells;
+                    cells = nullptr;
+                    cells = new cell[M];
+                    std::copy(tmp, tmp + M, cells);
+                    delete[] tmp;
+                    tmp = nullptr;
+                    break;
+                }
+            } else {
+                //nothing to insert
+            }
+        }
+        //reinsert current key-value-pair
+        if(succeeded) {
+            if(!putHelper(currentKey, currentValue, 0, true));
+        }
+
+
+    }
+    bool putHelper(int k, int v, int chain = 0, bool rehash = true) {
+        if(chain > max_eviction_length && rehash) {
+            rehash();
+            return true;
+        }
+        for(int i = 0; i < d; i++){
+            auto idx = hash_to_bucket_index((a[i] * (unsigned)k + b[i]) >> (32 - 26));
+
+            for(int i2 = 0; i2 < B; i2++){
+                auto &c = cells[idx+i2];
+                if(!c.valid) {
+                    c.key = k;
+                    c.value = v;
+                    c.valid = true;
+                    return false;
+                }
+
+                if(c.key == k) {
+                    c.value = v;
+                    return false;
+                }
+            }
+        }
+        //wenn ich hier ankomme, dann sind wohl alle Zellen mit etwas anderem besetzt
+        //waehle random h insert element dort und put(old.key, old.value)
+        int f = chooseFnc(prng);
+        int replacementIdx = hash_to_bucket_index((a[f] * (unsigned)k + b[f]) >> (32 - 26));
+        auto &c = cells[replacementIdx];
+        int key = c.key, value = c.value;
+        c.key = k;
+        c.value = v;
+
+        return putHelper(key, value, ++chain, rehash);
+    }
     void put(int k, int v) {
+        putHelper(k, v, 0);
+    }
+
+    std::optional<int> get(int k) {
         int i = 0;
+
         while(true) {
-            //really bad cycle control but at least it has a stop criterium.
-            bool b = (i&1);
+            assert(i < M);
 
-            auto idx = (b) ?
-                       hash_to_index(k) :
-                       hash_to_index((7*(unsigned int)k+3) >> (32 - 26));
+            auto idx = hash_to_index(k + i);
+            auto &c = cells[idx];
 
-            auto &c = (b) ?
-                      cells_one[idx] :
-                      cells_two[idx];
+            if(!c.valid)
+                return std::nullopt;
 
-            if(!c.valid) {
-                c.key = k;
-                c.value = v;
-                c.valid = true;
-                return;
-            }
-
-            if(c.key == k) {
-                c.value = v;
-                return;
-            }
-
-            if(!(c.key == k)) {
-                auto tmp_k = c.key;
-                auto tmp_v = c.value;
-                c.key = k;
-                c.value = v;
-                k = tmp_k;
-                v = tmp_v;
-                //std::cout << "k " << k << " tmp_k " << tmp_k << " ckey " << c.key << std::endl;
-            }
+            if(c.key == k)
+                return c.value;
 
             ++i;
         }
     }
 
-
-
-    std::optional<int> get(int k) {
-        auto idx = hash_to_index(k);
-        auto &c = cells_one[idx];
-
-        if(!c.valid)
-            return std::nullopt;
-        if(c.key == k)
-            return c.value;
-
-        idx = hash_to_index((7*(unsigned int)k+3) >> (32 - 26));
-        c = cells_two[idx];
-        if(!c.valid)
-            return std::nullopt;
-        if(c.key == k)
-            return c.value;
-        return std::nullopt;
-    }
-
-    cell *cells_one = nullptr;
-    cell *cells_two = nullptr;
+    cell *cells = nullptr;
+    int *as = nullptr;
+    int *bs = nullptr;
 };
 
 struct cuckoo_table {
