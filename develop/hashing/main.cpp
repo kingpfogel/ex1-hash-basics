@@ -364,161 +364,6 @@ struct bucket_cuckoo_table {
     int *bs = nullptr;
 };
 
-struct cuckoo_table {
-    static constexpr const char *name = "cuckoo";
-    std::mt19937 prng{42};
-    std::uniform_int_distribution<int> distrib{1, (2<<(32-26))};
-    int max_eviction_length = 100*log2(M);
-
-    struct cell {
-        int key;
-        int value;
-        bool valid = false;
-    };
-
-    cuckoo_table()
-            : cells_one{new cell[M]{}},
-              cells_two{new cell[M]{}},
-              a(randomOddInt()) ,
-              a2(randomOddInt()),
-              b(randomOddInt()),
-              b2(randomOddInt())
-              {}
-
-    void rehash() {
-        cell *tmp_one = new cell[M];
-        cell *tmp_two = new cell[M];
-        std::copy(cells_one, cells_one + M, tmp_one);
-        std::copy(cells_two, cells_two + M, tmp_two);
-        bool rehash = true;
-
-        while(rehash){
-            std::cout << "rehash a " << a << " b " << b << std::endl;
-            //creating a tmp copy
-
-            a = randomOddInt();
-            a2 = randomOddInt();
-            b = randomOddInt();
-            b2 = randomOddInt();
-
-            delete[] cells_one;
-            delete[] cells_two;
-            cells_one = nullptr;
-            cells_two = nullptr;
-            cells_two = new cell[M];
-            cells_one = new cell[M];
-
-            for(int i = 0; i<M; ++i){
-                auto &c = tmp_one[i];
-                if(c.valid){
-                    if(recursivePutHelper(c.key, c.value, true, 0)){
-                        rehash = true;
-                        break;
-                    } else {
-                        rehash = false;
-                    }
-                } else {
-                    rehash = false;
-                }
-                auto &c2 = tmp_two[i];
-                if(c2.valid){
-                    if(recursivePutHelper(c2.key, c2.value, true, 0)){
-                        rehash = true;
-                        break;
-                    } else {
-                        rehash = false;
-                    }
-                } else {
-                    rehash = false;
-                }
-            }
-        }
-    }
-
-    int randomOddInt(){
-        int r = distrib(prng);
-        return r&1?r:r+1;
-    }
-
-    bool recursivePutHelper(int k, int v, bool f, int chain){
-        auto idx = f?h1(k):h2(k);
-        auto idx2 = !f?h1(k):h2(k);
-        auto &c = f?cells_one[idx]:cells_two[idx];
-        auto &c2 = !f?cells_one[idx]:cells_two[idx2];
-
-        if(chain > max_eviction_length){
-            std::cout << "max a " << a << " b " << b << std::endl;
-            std::cout << chain << std::endl;
-            return true;
-        }
-
-        if(!c.valid) {
-            if((!c2.valid || c2.key != k)) {
-                c.key = k;
-                c.value = v;
-                c.valid = true;
-                return false;
-            }
-            return recursivePutHelper(k, v, !f, ++chain);
-        }
-
-        if(c.key == k) {
-            c.value = v;
-            return false;
-        }
-
-        if(!(c.key == k)) {
-            auto tmp_k = c.key;
-            auto tmp_v = c.value;
-            c.key = k;
-            c.value = v;
-            k = tmp_k;
-            v = tmp_v;
-            return recursivePutHelper(k, v, !f, ++chain);
-        }
-        return false;
-    }
-
-    void put(int k, int v) {
-        if(recursivePutHelper(k, v, true, 0)){
-            rehash();
-        };
-    }
-
-    int h1(int k){
-        return hash_to_index((a*(unsigned int)k+b) >> (32 - 26));
-    }
-
-    int h2(int k){
-        return hash_to_index((a2*(unsigned int)k+b2) >> (32 - 26));
-    }
-
-    std::optional<int> get(int k) {
-        auto idx = hash_to_index(k);
-        auto &c = cells_one[idx];
-
-        if(!c.valid)
-            return std::nullopt;
-        if(c.key == k)
-            return c.value;
-
-        idx = hash_to_index((7*(unsigned int)k+3) >> (32 - 26));
-        c = cells_two[idx];
-        if(!c.valid)
-            return std::nullopt;
-        if(c.key == k)
-            return c.value;
-        return std::nullopt;
-    }
-
-    cell *cells_one = nullptr;
-    cell *cells_two = nullptr;
-    int a = 0;
-    int a2 = 0;
-    int b = 0;
-    int b2 = 0;
-};
-
 // Helper function to evaluate a hash table algorithm.
 // You should not need to touch this.
 template<typename Algo>
@@ -703,8 +548,6 @@ int main(int argc, char **argv) {
             microbenchmark<stl_table>(fill_factor);
         }else if(algorithm == "quadratic") {
             microbenchmark<quadratic_table>(fill_factor);
-        }else if(algorithm == "cuckoo") {
-            microbenchmark<cuckoo_table>(fill_factor);
         }else if(algorithm == "bucket_cuckoo") {
             microbenchmark<bucket_cuckoo_table>(fill_factor);
         }else{
@@ -719,8 +562,6 @@ int main(int argc, char **argv) {
             evaluate<stl_table>(fill_factor);
         }else if(algorithm == "quadratic") {
             evaluate<quadratic_table>(fill_factor);
-        }else if(algorithm == "cuckoo") {
-            evaluate<cuckoo_table>(fill_factor);
         }else if(algorithm == "bucket_cuckoo") {
             evaluate<bucket_cuckoo_table>(fill_factor);
         }
