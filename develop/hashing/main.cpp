@@ -225,13 +225,13 @@ struct quadratic_table {
 struct bucket_cuckoo_table {
     static constexpr const char *name = "bucket_cuckoo";
     const int d = 2;
-    const int B = 2;
+    const int B = 4;
     const int log2B = log2(B);
 
     std::mt19937 prng{42};
     std::uniform_int_distribution<int> chooseHash{1, (2<<(32-26))};
     std::uniform_int_distribution<int> chooseFnc{0, d-1};
-    int max_eviction_length = 2;
+    int max_eviction_length = log2(M);
 
     struct cell {
         int key;
