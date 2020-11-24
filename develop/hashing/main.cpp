@@ -7,6 +7,7 @@
 #include <random>
 #include <unordered_map>
 #include <vector>
+#include <cmath>
 
 constexpr int M = 1 << 26;
 // bitshift example: 1 = 0001 and 1 << 2 = 0100
@@ -219,6 +220,241 @@ struct quadratic_table {
     cell *cells = nullptr;
 };
 
+
+
+struct bucket_cuckoo_table {
+    static constexpr const char *name = "bucket_cuckoo";
+
+    struct cell {
+        int key;
+        int value;
+        bool valid = false;
+    };
+
+    bucket_cuckoo_table()
+            : cells_one{new cell[(M)]{}},
+              cells_two{new cell[(M)]{}} {}
+
+
+    void put(int k, int v) {
+        int i = 0;
+        while(true) {
+            //really bad cycle control but at least it has a stop criterium.
+            bool b = (i&1);
+
+            auto idx = (b) ?
+                       hash_to_index(k) :
+                       hash_to_index((7*(unsigned int)k+3) >> (32 - 26));
+
+            auto &c = (b) ?
+                      cells_one[idx] :
+                      cells_two[idx];
+
+            if(!c.valid) {
+                c.key = k;
+                c.value = v;
+                c.valid = true;
+                return;
+            }
+
+            if(c.key == k) {
+                c.value = v;
+                return;
+            }
+
+            if(!(c.key == k)) {
+                auto tmp_k = c.key;
+                auto tmp_v = c.value;
+                c.key = k;
+                c.value = v;
+                k = tmp_k;
+                v = tmp_v;
+                //std::cout << "k " << k << " tmp_k " << tmp_k << " ckey " << c.key << std::endl;
+            }
+
+            ++i;
+        }
+    }
+
+
+
+    std::optional<int> get(int k) {
+        auto idx = hash_to_index(k);
+        auto &c = cells_one[idx];
+
+        if(!c.valid)
+            return std::nullopt;
+        if(c.key == k)
+            return c.value;
+
+        idx = hash_to_index((7*(unsigned int)k+3) >> (32 - 26));
+        c = cells_two[idx];
+        if(!c.valid)
+            return std::nullopt;
+        if(c.key == k)
+            return c.value;
+        return std::nullopt;
+    }
+
+    cell *cells_one = nullptr;
+    cell *cells_two = nullptr;
+};
+
+struct cuckoo_table {
+    static constexpr const char *name = "cuckoo";
+    std::mt19937 prng{42};
+    std::uniform_int_distribution<int> distrib{1, (2<<(32-26))};
+    int max_eviction_length = 100*log2(M);
+
+    struct cell {
+        int key;
+        int value;
+        bool valid = false;
+    };
+
+    cuckoo_table()
+            : cells_one{new cell[M]{}},
+              cells_two{new cell[M]{}},
+              a(randomOddInt()) ,
+              a2(randomOddInt()),
+              b(randomOddInt()),
+              b2(randomOddInt())
+              {}
+
+    void rehash() {
+        cell *tmp_one = new cell[M];
+        cell *tmp_two = new cell[M];
+        std::copy(cells_one, cells_one + M, tmp_one);
+        std::copy(cells_two, cells_two + M, tmp_two);
+        bool rehash = true;
+
+        while(rehash){
+            std::cout << "rehash a " << a << " b " << b << std::endl;
+            //creating a tmp copy
+
+            a = randomOddInt();
+            a2 = randomOddInt();
+            b = randomOddInt();
+            b2 = randomOddInt();
+
+            delete[] cells_one;
+            delete[] cells_two;
+            cells_one = nullptr;
+            cells_two = nullptr;
+            cells_two = new cell[M];
+            cells_one = new cell[M];
+
+            for(int i = 0; i<M; ++i){
+                auto &c = tmp_one[i];
+                if(c.valid){
+                    if(recursivePutHelper(c.key, c.value, true, 0)){
+                        rehash = true;
+                        break;
+                    } else {
+                        rehash = false;
+                    }
+                } else {
+                    rehash = false;
+                }
+                auto &c2 = tmp_two[i];
+                if(c2.valid){
+                    if(recursivePutHelper(c2.key, c2.value, true, 0)){
+                        rehash = true;
+                        break;
+                    } else {
+                        rehash = false;
+                    }
+                } else {
+                    rehash = false;
+                }
+            }
+        }
+    }
+
+    int randomOddInt(){
+        int r = distrib(prng);
+        return r&1?r:r+1;
+    }
+
+    bool recursivePutHelper(int k, int v, bool f, int chain){
+        auto idx = f?h1(k):h2(k);
+        auto idx2 = !f?h1(k):h2(k);
+        auto &c = f?cells_one[idx]:cells_two[idx];
+        auto &c2 = !f?cells_one[idx]:cells_two[idx2];
+
+        if(chain > max_eviction_length){
+            std::cout << "max a " << a << " b " << b << std::endl;
+            std::cout << chain << std::endl;
+            return true;
+        }
+
+        if(!c.valid) {
+            if((!c2.valid || c2.key != k)) {
+                c.key = k;
+                c.value = v;
+                c.valid = true;
+                return false;
+            }
+            return recursivePutHelper(k, v, !f, ++chain);
+        }
+
+        if(c.key == k) {
+            c.value = v;
+            return false;
+        }
+
+        if(!(c.key == k)) {
+            auto tmp_k = c.key;
+            auto tmp_v = c.value;
+            c.key = k;
+            c.value = v;
+            k = tmp_k;
+            v = tmp_v;
+            return recursivePutHelper(k, v, !f, ++chain);
+        }
+        return false;
+    }
+
+    void put(int k, int v) {
+        if(recursivePutHelper(k, v, true, 0)){
+            rehash();
+        };
+    }
+
+    int h1(int k){
+        return hash_to_index((a*(unsigned int)k+b) >> (32 - 26));
+    }
+
+    int h2(int k){
+        return hash_to_index((a2*(unsigned int)k+b2) >> (32 - 26));
+    }
+
+    std::optional<int> get(int k) {
+        auto idx = hash_to_index(k);
+        auto &c = cells_one[idx];
+
+        if(!c.valid)
+            return std::nullopt;
+        if(c.key == k)
+            return c.value;
+
+        idx = hash_to_index((7*(unsigned int)k+3) >> (32 - 26));
+        c = cells_two[idx];
+        if(!c.valid)
+            return std::nullopt;
+        if(c.key == k)
+            return c.value;
+        return std::nullopt;
+    }
+
+    cell *cells_one = nullptr;
+    cell *cells_two = nullptr;
+    int a = 0;
+    int a2 = 0;
+    int b = 0;
+    int b2 = 0;
+};
+
 // Helper function to evaluate a hash table algorithm.
 // You should not need to touch this.
 template<typename Algo>
@@ -338,87 +574,94 @@ static const char *usage_text =
 	"        Set the fill factor.\n";
 
 int main(int argc, char **argv) {
-	bool do_microbenchmark = false;
-	std::string_view algorithm;
-	float fill_factor = 0.5;
+    bool do_microbenchmark = false;
+    std::string_view algorithm;
+    float fill_factor = 0.5;
 
-	auto error = [] (const char *text) {
-		std::cerr << usage_text << "Usage error: " << text << std::endl;
-		exit(2);
-	};
+    auto error = [] (const char *text) {
+        std::cerr << usage_text << "Usage error: " << text << std::endl;
+        exit(2);
+    };
 
-	// Argument for unary options.
-	const char *arg;
+    // Argument for unary options.
+    const char *arg;
 
-	// Parse all options here.
+    // Parse all options here.
 
-	char **p = argv + 1;
+    char **p = argv + 1;
 
-	auto handle_nullary_option = [&] (const char *name) -> bool {
-		assert(*p);
-		if(std::strcmp(*p, name))
-			return false;
-		++p;
-		return true;
-	};
+    auto handle_nullary_option = [&] (const char *name) -> bool {
+        assert(*p);
+        if(std::strcmp(*p, name))
+            return false;
+        ++p;
+        return true;
+    };
 
-	auto handle_unary_option = [&] (const char *name) -> bool {
-		assert(*p);
-		if(std::strcmp(*p, name))
-			return false;
-		++p;
-		if(!(*p))
-			error("expected argument for unary option");
-		arg = *p;
-		++p;
-		return true;
-	};
+    auto handle_unary_option = [&] (const char *name) -> bool {
+        assert(*p);
+        if(std::strcmp(*p, name))
+            return false;
+        ++p;
+        if(!(*p))
+            error("expected argument for unary option");
+        arg = *p;
+        ++p;
+        return true;
+    };
 
-	while(*p && !std::strncmp(*p, "--", 2)) {
-		if(handle_nullary_option("--microbenchmark")) {
-			do_microbenchmark = true;
-		}else if(handle_unary_option("--algo")) {
-			algorithm = arg;
-		}else if(handle_unary_option("--fill")) {
-			fill_factor = std::atof(arg);
-		}else{
-			error("unknown command line option");
-		}
-	}
-
-	if(*p)
-		error("unexpected arguments");
-
-	// Verify that options are correct and run the algorithm.
-
-	if(algorithm.empty())
-		error("no algorithm specified");
-
-	if(do_microbenchmark) {
-		if(algorithm == "chaining") {
-			microbenchmark<chaining_table>(fill_factor);
-		}else if(algorithm == "linear") {
-			microbenchmark<linear_table>(fill_factor);
-		}else if(algorithm == "stl") {
-			microbenchmark<stl_table>(fill_factor);
-		}else if(algorithm == "quadratic") {
-            microbenchmark<quadratic_table>(fill_factor);
+    while(*p && !std::strncmp(*p, "--", 2)) {
+        if(handle_nullary_option("--microbenchmark")) {
+            do_microbenchmark = true;
+        }else if(handle_unary_option("--algo")) {
+            algorithm = arg;
+        }else if(handle_unary_option("--fill")) {
+            fill_factor = std::atof(arg);
         }else{
-			error("unknown algorithm");
-		}
-	}else{
-		if(algorithm == "chaining") {
-			evaluate<chaining_table>(fill_factor);
-		}else if(algorithm == "linear") {
-			evaluate<linear_table>(fill_factor);
-		}else if(algorithm == "stl") {
-			evaluate<stl_table>(fill_factor);
-		}
-        else if(algorithm == "quadratic") {
-            evaluate<quadratic_table>(fill_factor);
+            error("unknown command line option");
         }
-		else{
-			error("unknown algorithm");
-		}
-	}
+    }
+
+    if(*p)
+        error("unexpected arguments");
+
+    // Verify that options are correct and run the algorithm.
+
+    if(algorithm.empty())
+        error("no algorithm specified");
+
+    if(do_microbenchmark) {
+        if(algorithm == "chaining") {
+            microbenchmark<chaining_table>(fill_factor);
+        }else if(algorithm == "linear") {
+            microbenchmark<linear_table>(fill_factor);
+        }else if(algorithm == "stl") {
+            microbenchmark<stl_table>(fill_factor);
+        }else if(algorithm == "quadratic") {
+            microbenchmark<quadratic_table>(fill_factor);
+        }else if(algorithm == "cuckoo") {
+            microbenchmark<cuckoo_table>(fill_factor);
+        }else if(algorithm == "bucket_cuckoo") {
+            microbenchmark<bucket_cuckoo_table>(fill_factor);
+        }else{
+            error("unknown algorithm");
+        }
+    }else{
+        if(algorithm == "chaining") {
+            evaluate<chaining_table>(fill_factor);
+        }else if(algorithm == "linear") {
+            evaluate<linear_table>(fill_factor);
+        }else if(algorithm == "stl") {
+            evaluate<stl_table>(fill_factor);
+        }else if(algorithm == "quadratic") {
+            evaluate<quadratic_table>(fill_factor);
+        }else if(algorithm == "cuckoo") {
+            evaluate<cuckoo_table>(fill_factor);
+        }else if(algorithm == "bucket_cuckoo") {
+            evaluate<bucket_cuckoo_table>(fill_factor);
+        }
+        else{
+            error("unknown algorithm");
+        }
+    }
 }
