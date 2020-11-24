@@ -225,13 +225,13 @@ struct quadratic_table {
 struct bucket_cuckoo_table {
     static constexpr const char *name = "bucket_cuckoo";
     const int d = 2;
-    const int B = 4;
+    const int B = 2;
     const int log2B = log2(B);
 
-    std::mt19937 prng{10};
+    std::mt19937 prng{42};
     std::uniform_int_distribution<int> chooseHash{1, (2<<(32-26))};
     std::uniform_int_distribution<int> chooseFnc{0, d-1};
-    int max_eviction_length = log2(M);
+    int max_eviction_length = 2;
 
     struct cell {
         int key;
@@ -266,7 +266,6 @@ struct bucket_cuckoo_table {
 
     bool rehash(int currentKey, int currentValue){
         rerollHashFunctions();
-        std::cout << "a: " << as[0] << " b: " << bs[0] << std::endl;
         cell *tmp = new cell[M];
         std::copy(cells, cells + M, tmp);
         delete[] cells;
@@ -302,8 +301,9 @@ struct bucket_cuckoo_table {
     }
     bool putHelper(int k, int v, int chain = 0, bool hashAgain = true) {
         if(chain > max_eviction_length) {
-            while(hashAgain && rehash(k, v)) {
-                std::cout << "rehash" << std::endl;
+            bool rehashSuccess = true;
+            while(hashAgain && rehashSuccess) {
+                rehashSuccess = rehash(k, v);
             }
             return false;
         }
