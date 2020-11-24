@@ -296,6 +296,12 @@ struct bucket_cuckoo_table {
         //reinsert current key-value-pair
         if(succeeded) {
             if(!putHelper(currentKey, currentValue, 0, false)){
+                delete[] cells;
+                cells = nullptr;
+                cells = new cell[M];
+                std::copy(tmp, tmp + M, cells);
+                delete[] tmp;
+                tmp = nullptr;
                 return true;
             };
         }
