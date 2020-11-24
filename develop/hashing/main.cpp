@@ -231,6 +231,7 @@ struct bucket_cuckoo_table {
     std::mt19937 prng{42};
     std::uniform_int_distribution<int> chooseHash{1, (2<<(32-26))};
     std::uniform_int_distribution<int> chooseFnc{0, d-1};
+    std::uniform_int_distribution<int> chooseCellInBucket{0, B-1};
     int max_eviction_length = log2(M);
 
     struct cell {
@@ -342,7 +343,7 @@ struct bucket_cuckoo_table {
         //waehle random h insert element dort und put(old.key, old.value)
         int f = chooseFnc(prng);
         int replacementIdx = hash_to_bucket_index((as[f] * (unsigned)k + bs[f]) >> (32 - 26));
-        auto &c = cells[replacementIdx];
+        auto &c = cells[replacementIdx + chooseCellInBucket(prng)];
         int key = c.key, value = c.value;
         c.key = k;
         c.value = v;
