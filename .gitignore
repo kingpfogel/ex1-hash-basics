@@ -1,1 +1,6 @@
 /my-build/
+.idea
+aux
+dev-builds
+.ipynb_checkpoints
+status.cache
