@@ -226,6 +226,7 @@ struct bucket_cuckoo_table {
     static constexpr const char *name = "bucket_cuckoo";
     const int d = 2;
     const int B = 4;
+    //I assume that our B is always a power of 2.
     const int log2B = log2(B);
 
     std::mt19937 prng{42};
@@ -278,7 +279,7 @@ struct bucket_cuckoo_table {
         //reinsert all other key-value-pairs
         bool succeeded;
         for(int i = 0; i<M; ++i){
-            auto &c = cells[i];
+            auto &c = tmp[i];
             if(c.valid){
                 succeeded = putHelper(c.key, c.value, 0, false);
                 if(!succeeded){
@@ -313,7 +314,10 @@ struct bucket_cuckoo_table {
     bool putHelper(int k, int v, int chain = 0, bool hashAgain = true) {
         if(chain > max_eviction_length) {
             bool rehashSuccess = true;
+            std::cerr << "k: " << k << " v: " << v << std::endl;
+            std::cerr << "hashAgain: " << hashAgain << " rehashSuccess: " << rehashSuccess << std::endl;
             while(hashAgain && rehashSuccess) {
+                std::cerr << "k: " << k << " v: " << v << std::endl;
                 rehashSuccess = rehash(k, v);
             }
             if(!rehashSuccess){
@@ -326,7 +330,7 @@ struct bucket_cuckoo_table {
 
             for(int i2 = 0; i2 < B; i2++){
                 auto &c = cells[idx+i2];
-                if(c.key == k) {
+                if(c.valid && c.key == k) {
                     c.value = v;
                     return true;
                 }
@@ -339,7 +343,7 @@ struct bucket_cuckoo_table {
                     c.value = v;
                     c.valid = true;
                     return true;
-                }
+                } //else we could also do continue as long as we do not have a delete operation.
             }
         }
         //wenn ich hier ankomme, dann sind wohl alle Zellen mit etwas anderem besetzt
@@ -443,7 +447,7 @@ void evaluate(float fill_factor) {
 		}
 
 		if(*r != v) {
-			++errors;
+            ++errors;
 			continue;
 		}
 	}
