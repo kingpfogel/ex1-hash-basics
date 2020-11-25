@@ -7,6 +7,7 @@
 #include <random>
 #include <unordered_map>
 #include <vector>
+#include <cmath>
 
 constexpr int M = 1 << 26;
 // bitshift example: 1 = 0001 and 1 << 2 = 0100
@@ -219,6 +220,172 @@ struct quadratic_table {
     cell *cells = nullptr;
 };
 
+
+
+struct bucket_cuckoo_table {
+    static constexpr const char *name = "bucket_cuckoo";
+    const int d = 2;
+    const int B = 4;
+    //I assume that our B is always a power of 2.
+    const int log2B = log2(B);
+
+    std::mt19937 prng{42};
+    std::uniform_int_distribution<int> chooseHash{1, (2<<(32-26))};
+    std::uniform_int_distribution<int> chooseFnc{0, d-1};
+    std::uniform_int_distribution<int> chooseCellInBucket{0, B-1};
+    int max_eviction_length = log2(M);
+
+    struct cell {
+        int key;
+        int value;
+        bool valid = false;
+    };
+
+    bucket_cuckoo_table()
+        : cells{new cell[(M)]{}},
+        as{new int[(d)]{}},
+        bs{new int[(d)]{}}
+        {
+            rerollHashFunctions();
+        }
+
+    int randomOddInt(){
+        int r = chooseHash(prng);
+        return r&1?r:r+1;
+    }
+    void rerollHashFunctions() {
+        for (int i = 0; i < d; ++i) {
+            as[i] = randomOddInt();
+            bs[i] = randomOddInt();
+        }
+    }
+
+    int hash_to_bucket_index(int h) {
+        return (h & ((M >> log2B) - 1)) * B;
+    }
+
+    //d = hash functions
+    //B = buckets => linear probe through buckets
+    //hash table consists of m/B buckets - each containing B cells => linear probe B times per Bucket
+    //Cuckoo hash functions h1, ..., hd select d bucket indices.
+
+    bool rehash(int currentKey, int currentValue){
+        rerollHashFunctions();
+        cell *tmp = new cell[M];
+        std::copy(cells, cells + M, tmp);
+        delete[] cells;
+        cells = nullptr;
+        cells = new cell[M];
+        //reinsert all other key-value-pairs
+        bool succeeded;
+        for(int i = 0; i<M; ++i){
+            auto &c = tmp[i];
+            if(c.valid){
+                succeeded = putHelper(c.key, c.value, 0, false);
+                if(!succeeded){
+                    delete[] cells;
+                    cells = nullptr;
+                    cells = new cell[M];
+                    std::copy(tmp, tmp + M, cells);
+                    delete[] tmp;
+                    tmp = nullptr;
+                    return true;
+                }
+            } else {
+                //nothing to insert
+            }
+        }
+        //reinsert current key-value-pair
+        if(succeeded) {
+            if(!putHelper(currentKey, currentValue, 0, false)){
+                delete[] cells;
+                cells = nullptr;
+                cells = new cell[M];
+                std::copy(tmp, tmp + M, cells);
+                delete[] tmp;
+                tmp = nullptr;
+                return true;
+            };
+        }
+
+        return false;
+    }
+
+    bool putHelper(int k, int v, int chain = 0, bool hashAgain = true) {
+        if(chain > max_eviction_length) {
+            bool rehashSuccess = true;
+            std::cerr << "k: " << k << " v: " << v << std::endl;
+            std::cerr << "hashAgain: " << hashAgain << " rehashSuccess: " << rehashSuccess << std::endl;
+            while(hashAgain && rehashSuccess) {
+                std::cerr << "k: " << k << " v: " << v << std::endl;
+                rehashSuccess = rehash(k, v);
+            }
+            if(!rehashSuccess){
+                return true;
+            }
+            return false;
+        }
+        for(int i = 0; i < d; i++){
+            auto idx = hash_to_bucket_index((as[i] * (unsigned)k + bs[i]) >> (32 - 26));
+
+            for(int i2 = 0; i2 < B; i2++){
+                auto &c = cells[idx+i2];
+                if(c.valid && c.key == k) {
+                    c.value = v;
+                    return true;
+                }
+            }
+
+            for(int i2 = 0; i2 < B; i2++){
+                auto &c = cells[idx+i2];
+                if(!c.valid) {
+                    c.key = k;
+                    c.value = v;
+                    c.valid = true;
+                    return true;
+                } //else we could also do continue as long as we do not have a delete operation.
+            }
+        }
+        //wenn ich hier ankomme, dann sind wohl alle Zellen mit etwas anderem besetzt
+        //waehle random h insert element dort und put(old.key, old.value)
+        int f = chooseFnc(prng);
+        int replacementIdx = hash_to_bucket_index((as[f] * (unsigned)k + bs[f]) >> (32 - 26));
+        auto &c = cells[replacementIdx + chooseCellInBucket(prng)];
+        int key = c.key, value = c.value;
+        c.key = k;
+        c.value = v;
+
+        return putHelper(key, value, ++chain, hashAgain);
+    }
+
+    void put(int k, int v) {
+        putHelper(k, v, 0);
+    }
+
+    std::optional<int> get(int k) {
+        for(int i = 0; i < d; i++){
+            auto idx = hash_to_bucket_index((as[i] * (unsigned)k + bs[i]) >> (32 - 26));
+
+            for(int i2 = 0; i2 < B; i2++){
+                auto &c = cells[idx+i2];
+                if(!c.valid) {
+                    continue;
+                }
+
+                if(c.key == k) {
+                    return c.value;
+                }
+            }
+        }
+
+        return std::nullopt;
+    }
+
+    cell *cells = nullptr;
+    int *as = nullptr;
+    int *bs = nullptr;
+};
+
 // Helper function to evaluate a hash table algorithm.
 // You should not need to touch this.
 template<typename Algo>
@@ -280,7 +447,7 @@ void evaluate(float fill_factor) {
 		}
 
 		if(*r != v) {
-			++errors;
+            ++errors;
 			continue;
 		}
 	}
@@ -338,87 +505,90 @@ static const char *usage_text =
 	"        Set the fill factor.\n";
 
 int main(int argc, char **argv) {
-	bool do_microbenchmark = false;
-	std::string_view algorithm;
-	float fill_factor = 0.5;
+    bool do_microbenchmark = false;
+    std::string_view algorithm;
+    float fill_factor = 0.5;
 
-	auto error = [] (const char *text) {
-		std::cerr << usage_text << "Usage error: " << text << std::endl;
-		exit(2);
-	};
+    auto error = [] (const char *text) {
+        std::cerr << usage_text << "Usage error: " << text << std::endl;
+        exit(2);
+    };
 
-	// Argument for unary options.
-	const char *arg;
+    // Argument for unary options.
+    const char *arg;
 
-	// Parse all options here.
+    // Parse all options here.
 
-	char **p = argv + 1;
+    char **p = argv + 1;
 
-	auto handle_nullary_option = [&] (const char *name) -> bool {
-		assert(*p);
-		if(std::strcmp(*p, name))
-			return false;
-		++p;
-		return true;
-	};
+    auto handle_nullary_option = [&] (const char *name) -> bool {
+        assert(*p);
+        if(std::strcmp(*p, name))
+            return false;
+        ++p;
+        return true;
+    };
 
-	auto handle_unary_option = [&] (const char *name) -> bool {
-		assert(*p);
-		if(std::strcmp(*p, name))
-			return false;
-		++p;
-		if(!(*p))
-			error("expected argument for unary option");
-		arg = *p;
-		++p;
-		return true;
-	};
+    auto handle_unary_option = [&] (const char *name) -> bool {
+        assert(*p);
+        if(std::strcmp(*p, name))
+            return false;
+        ++p;
+        if(!(*p))
+            error("expected argument for unary option");
+        arg = *p;
+        ++p;
+        return true;
+    };
 
-	while(*p && !std::strncmp(*p, "--", 2)) {
-		if(handle_nullary_option("--microbenchmark")) {
-			do_microbenchmark = true;
-		}else if(handle_unary_option("--algo")) {
-			algorithm = arg;
-		}else if(handle_unary_option("--fill")) {
-			fill_factor = std::atof(arg);
-		}else{
-			error("unknown command line option");
-		}
-	}
-
-	if(*p)
-		error("unexpected arguments");
-
-	// Verify that options are correct and run the algorithm.
-
-	if(algorithm.empty())
-		error("no algorithm specified");
-
-	if(do_microbenchmark) {
-		if(algorithm == "chaining") {
-			microbenchmark<chaining_table>(fill_factor);
-		}else if(algorithm == "linear") {
-			microbenchmark<linear_table>(fill_factor);
-		}else if(algorithm == "stl") {
-			microbenchmark<stl_table>(fill_factor);
-		}else if(algorithm == "quadratic") {
-            microbenchmark<quadratic_table>(fill_factor);
+    while(*p && !std::strncmp(*p, "--", 2)) {
+        if(handle_nullary_option("--microbenchmark")) {
+            do_microbenchmark = true;
+        }else if(handle_unary_option("--algo")) {
+            algorithm = arg;
+        }else if(handle_unary_option("--fill")) {
+            fill_factor = std::atof(arg);
         }else{
-			error("unknown algorithm");
-		}
-	}else{
-		if(algorithm == "chaining") {
-			evaluate<chaining_table>(fill_factor);
-		}else if(algorithm == "linear") {
-			evaluate<linear_table>(fill_factor);
-		}else if(algorithm == "stl") {
-			evaluate<stl_table>(fill_factor);
-		}
-        else if(algorithm == "quadratic") {
-            evaluate<quadratic_table>(fill_factor);
+            error("unknown command line option");
         }
-		else{
-			error("unknown algorithm");
-		}
-	}
+    }
+
+    if(*p)
+        error("unexpected arguments");
+
+    // Verify that options are correct and run the algorithm.
+
+    if(algorithm.empty())
+        error("no algorithm specified");
+
+    if(do_microbenchmark) {
+        if(algorithm == "chaining") {
+            microbenchmark<chaining_table>(fill_factor);
+        }else if(algorithm == "linear") {
+            microbenchmark<linear_table>(fill_factor);
+        }else if(algorithm == "stl") {
+            microbenchmark<stl_table>(fill_factor);
+        }else if(algorithm == "quadratic") {
+            microbenchmark<quadratic_table>(fill_factor);
+        }else if(algorithm == "bucket_cuckoo") {
+            microbenchmark<bucket_cuckoo_table>(fill_factor);
+        }else{
+            error("unknown algorithm");
+        }
+    }else{
+        if(algorithm == "chaining") {
+            evaluate<chaining_table>(fill_factor);
+        }else if(algorithm == "linear") {
+            evaluate<linear_table>(fill_factor);
+        }else if(algorithm == "stl") {
+            evaluate<stl_table>(fill_factor);
+        }else if(algorithm == "quadratic") {
+            evaluate<quadratic_table>(fill_factor);
+        }else if(algorithm == "bucket_cuckoo") {
+            evaluate<bucket_cuckoo_table>(fill_factor);
+        }
+        else{
+            error("unknown algorithm");
+        }
+    }
 }

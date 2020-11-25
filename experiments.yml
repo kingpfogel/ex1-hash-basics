@@ -34,8 +34,10 @@ variants:
         extra_args: ['--algo', 'linear']
       - name: stl
         extra_args: ['--algo', 'stl']
-      - name: stl
+      - name: quadratic
         extra_args: [ '--algo', 'quadratic' ]
+      - name: bucket-cuckoo
+        extra_args: [ '--algo', 'bucket_cuckoo' ]
   - axis: fill-factor
     items:
       - name: ff50
