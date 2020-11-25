@@ -326,15 +326,18 @@ struct bucket_cuckoo_table {
 
             for(int i2 = 0; i2 < B; i2++){
                 auto &c = cells[idx+i2];
+                if(c.key == k) {
+                    c.value = v;
+                    return true;
+                }
+            }
+
+            for(int i2 = 0; i2 < B; i2++){
+                auto &c = cells[idx+i2];
                 if(!c.valid) {
                     c.key = k;
                     c.value = v;
                     c.valid = true;
-                    return true;
-                }
-
-                if(c.key == k) {
-                    c.value = v;
                     return true;
                 }
             }
